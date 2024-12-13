@@ -655,7 +655,7 @@ ssize_t ksys_write(unsigned int fd, const char __user *buf, size_t count)
 SYSCALL_DEFINE3(write, unsigned int, fd, const char __user *, buf,
 		size_t, count)
 {
-	//track_syscall(__NR_write);
+	track_syscall(__NR_write);
 	return ksys_write(fd, buf, count);
 }
 

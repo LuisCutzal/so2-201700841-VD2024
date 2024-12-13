@@ -25,15 +25,20 @@ int main() {
     int result = syscall(__NR_luis_track_syscall_usage, stats);
 
     if (result == 0) {
-        printf("Syscall executed successfully\n");
-
         // Depuración: imprimir los valores de count para cada syscall
         for (int i = 0; i < 1024; i++) {
-            //printf("Debug: Syscall ID %d, Count = %lu\n", i, stats[i].count);
             if (stats[i].count > 0) {
-                printf("Syscall ID %d: Count = %lu, Last used = %ld.%09ld\n",
+                // Convertir la parte de segundos del tiempo a una estructura tm
+                char time_str[100];
+                struct tm *tm_info = localtime(&stats[i].time_last_used.tv_sec);
+
+                // Formatear la fecha y hora de manera legible
+                strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", tm_info);
+
+                // Imprimir el ID de la syscall junto con la cuenta y el tiempo formateado
+                printf("Syscall ID %d: Count = %lu, Last used = %s.%09ld\n",
                        i, stats[i].count,
-                       stats[i].time_last_used.tv_sec, stats[i].time_last_used.tv_nsec);
+                       time_str, stats[i].time_last_used.tv_nsec);
             }
         }
     } else {
@@ -44,3 +49,7 @@ int main() {
     free(stats);
     return 0;
 }
+
+
+//gcc -o test_syscall2 test_syscall2.c
+// ./test_syscall2 

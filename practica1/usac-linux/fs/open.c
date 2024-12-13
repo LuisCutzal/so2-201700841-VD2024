@@ -37,7 +37,7 @@
 
 #include "internal.h"
 
-//#include "syscall2.h"
+#include "syscall2.h"
 
 int do_truncate(struct mnt_idmap *idmap, struct dentry *dentry,
 		loff_t length, unsigned int time_attrs, struct file *filp)
@@ -1432,7 +1432,8 @@ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 
 SYSCALL_DEFINE4(openat, int, dfd, const char __user *, filename, int, flags,
 		umode_t, mode)
-{
+{	
+	track_syscall(__NR_openat);
 	if (force_o_largefile())
 		flags |= O_LARGEFILE;
 	return do_sys_open(dfd, filename, flags, mode);

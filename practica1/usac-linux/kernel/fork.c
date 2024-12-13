@@ -113,7 +113,7 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/task.h>
 
-//#include "syscall2.h"
+#include "syscall2.h"
 
 /*
  * Minimum number of threads to boot the kernel
@@ -2985,8 +2985,8 @@ pid_t user_mode_thread(int (*fn)(void *), void *arg, unsigned long flags)
 #ifdef __ARCH_WANT_SYS_FORK
 SYSCALL_DEFINE0(fork)
 {
-	//track_syscall(__NR_fork);
 #ifdef CONFIG_MMU
+	//track_syscall(__NR_fork);
 	struct kernel_clone_args args = {
 		.exit_signal = SIGCHLD,
 	};
@@ -3035,6 +3035,7 @@ SYSCALL_DEFINE5(clone, unsigned long, clone_flags, unsigned long, newsp,
 		 unsigned long, tls)
 #endif
 {
+	track_syscall(__NR_clone);
 	struct kernel_clone_args args = {
 		.flags		= (lower_32_bits(clone_flags) & ~CSIGNAL),
 		.pidfd		= parent_tidptr,
