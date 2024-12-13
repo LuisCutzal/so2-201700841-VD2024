@@ -26,8 +26,10 @@ int main() {
 
     if (result == 0) {
         printf("Syscall executed successfully\n");
-        // Imprimir los resultados de las syscalls
+
+        // Depuración: imprimir los valores de count para cada syscall
         for (int i = 0; i < 1024; i++) {
+            //printf("Debug: Syscall ID %d, Count = %lu\n", i, stats[i].count);
             if (stats[i].count > 0) {
                 printf("Syscall ID %d: Count = %lu, Last used = %ld.%09ld\n",
                        i, stats[i].count,
