@@ -68,46 +68,41 @@
 #include <asm/io.h>
 #include <asm/unistd.h>
 
-
-
 #include <linux/time.h>
 #include <linux/ktime.h>
 #include "syscall2.h"
 
 //estructura para guardar los valores
-
-
-
-
 struct syscall_usage{
     unsigned long count;
     struct timespec64 time_last_used;
-}
-
+};  // <- Punto y coma aquí
 
 #define MAX_SYS_CALLS 1024
 static struct syscall_usage *syscall_counters;
 
+static int init_syscall_counters(void);  // Declarar la función
 
-SYSCALL_DEFINE0(luis_track_syscall_usage, struct syscall_usage __user*, estatic){
-    if(!syscall_counters){ //si ya inicializamos el array de contadores
-        if(init_syscall_counters != 0){ //en caso de no inicializarlo
-            return init_syscall_counters; //equivalente a retornar -ENOMEM
+SYSCALL_DEFINE1(luis_track_syscall_usage, struct syscall_usage __user *, estatic)
+{
+    if(!syscall_counters){ // Si ya inicializamos el array de contadores
+        if(init_syscall_counters() != 0){ // En caso de no inicializarlo
+            return -ENOMEM; // Equivalente a retornar -ENOMEM
         }
     }
-    //devolvemos estadisticas al usuario
-    int resultadoCopi = copy_to_user(estatic, syscall_counters, sizeof(syscall_usage)*MAX_SYS_CALLS)
-    if(resultadoCopi){
+
+    // Devolvemos estadísticas al usuario
+    int resultadoCopi = copy_to_user(estatic, syscall_counters, sizeof(struct syscall_usage) * MAX_SYS_CALLS);
+    if (resultadoCopi) {
         return -EFAULT;
     }
     return 0;
 }
 
 //funcion para inicializar las variables
-
 static int init_syscall_counters(void){
     syscall_counters = kzalloc(
-        sizeof(syscall_usage)*MAX_SYS_CALLS, //espacio de una estructura * 
+        sizeof(struct syscall_usage) * MAX_SYS_CALLS, //espacio de una estructura * 
         GFP_KERNEL);
     if(syscall_counters == NULL){
         return -ENOMEM;
@@ -115,15 +110,13 @@ static int init_syscall_counters(void){
     return 0;
 }
 
-
 void track_syscall(int syscall_id){
     if(!syscall_counters || syscall_id >= MAX_SYS_CALLS){
         return;
     }
     //en caso si nos interese 
     syscall_counters[syscall_id].count++;
+    struct timespec64 now;  // Declarar la variable now
     ktime_get_real_ts64(&now);
     syscall_counters[syscall_id].time_last_used = now;
-
 }
-

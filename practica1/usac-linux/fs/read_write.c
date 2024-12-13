@@ -25,7 +25,7 @@
 #include <linux/uaccess.h>
 #include <asm/unistd.h>
 
-#include <linux/syscall2.h>
+#include "syscall2.h"
 
 const struct file_operations generic_ro_fops = {
 	.llseek		= generic_file_llseek,
@@ -312,7 +312,6 @@ static off_t ksys_lseek(unsigned int fd, off_t offset, unsigned int whence)
 
 SYSCALL_DEFINE3(lseek, unsigned int, fd, off_t, offset, unsigned int, whence)
 {
-	track_syscall(__NR_open);
 	return ksys_lseek(fd, offset, whence);
 }
 
@@ -629,6 +628,7 @@ ssize_t ksys_read(unsigned int fd, char __user *buf, size_t count)
 
 SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
 {
+	track_syscall(__NR_read);
 	return ksys_read(fd, buf, count);
 }
 
@@ -655,6 +655,7 @@ ssize_t ksys_write(unsigned int fd, const char __user *buf, size_t count)
 SYSCALL_DEFINE3(write, unsigned int, fd, const char __user *, buf,
 		size_t, count)
 {
+	//track_syscall(__NR_write);
 	return ksys_write(fd, buf, count);
 }
 
