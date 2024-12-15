@@ -184,3 +184,43 @@ process_commands "${post_compile_commands[@]}"
 
 ```
 
+<h1>Personalización del nombre del sistema</h1>
+
+- Dirigirnos al kernel que descomprimimos.
+- Entrar a la ruta: include/linux/uts.h
+- Modificar el archivo de esta forma:
+
+```cpp
+#define UTS_SYSNAME "Linux sopesOS"
+```
+
+<h1>Mensajes de inicio personalizados</h1>
+
+- Dirigirnos al kernel que descomprimimos.
+- Entrar a la ruta: init/main.c
+- Modificar el archivo de esta forma:
+
+```cpp
+	printk(KERN_INFO "Luis Antonio cutzal Chalí - 201700841\n");
+	printk(KERN_INFO ".__        .__        \n");
+	printk(KERN_INFO "|  |  __ __|__| ______\n");
+	printk(KERN_INFO "|  | |  |  \  |/  ___/\n");
+	printk(KERN_INFO "|  |_|  |  /  |\___ \ \n");
+	printk(KERN_INFO "|____/____/|__/____  >\n");
+	printk(KERN_INFO "				     \/ \n");
+```
+
+- Tener en cuenta que se debe de modificar a partir del comentario: trace_printk ubicado en la linea 936
+
+<h2>Nota: cada vez que se modifica algo del kernel es necesario volver a ejecutar el archivo:
+
++ ./compile_and_install.sh
+
+</h2>
+
+
+
+<h3> Tambien es necesario que cada archvio que se necesite modificar se utilice el comando para crear el acceso directo, tener en cuenta que se debe de crear una ruta igual a la ruta que tiene el archivo original</h3>
+
+![primera imagen](./imagenes_manual/Captura%20de%20pantalla%20(108).png)
+
