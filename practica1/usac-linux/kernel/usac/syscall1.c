@@ -17,15 +17,19 @@ SYSCALL_DEFINE1(luis_capture_memory_snapshot, struct memory_snapshot __user *, s
     kernel_snapshot.total_memory = totalram_pages() << PAGE_SHIFT;
 
     // Calcular memoria libre en bytes usando global_node_page_state
-    kernel_snapshot.free_memory = global_node_page_state((enum node_stat_item)NR_FREE_PAGES) << PAGE_SHIFT;
+    kernel_snapshot.free_memory = (long)global_node_page_state((enum node_stat_item)NR_FREE_PAGES) << PAGE_SHIFT;
 
     // Calcular memoria utilizada
     kernel_snapshot.used_memory = kernel_snapshot.total_memory - kernel_snapshot.free_memory;
 
-    // Asignar valores ficticios para campos adicionales
-    kernel_snapshot.active_pages = 1000; // Placeholder
-    kernel_snapshot.cache_pages = 500;  // Placeholder
-    kernel_snapshot.swap_pages = 200;   // Placeholder
+    // Obtener páginas activas (usa NR_INACTIVE_FILE si NR_INACTIVE_PAGES no está disponible)
+    kernel_snapshot.active_pages = global_node_page_state(NR_INACTIVE_FILE);
+
+    // Obtener páginas de caché
+    kernel_snapshot.cache_pages = global_node_page_state(NR_FILE_PAGES);
+
+    // Obtener las páginas de swap (verifica si ZSWPIN y ZSWPOUT son correctas)
+    kernel_snapshot.swap_pages = global_node_page_state(ZSWPIN) + global_node_page_state(ZSWPOUT);
 
     // Copiar los datos al espacio de usuario
     if (copy_to_user(snapshot, &kernel_snapshot, sizeof(struct memory_snapshot))) {
