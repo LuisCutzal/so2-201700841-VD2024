@@ -222,8 +222,14 @@ process_commands "${post_compile_commands[@]}"
 
 ```cpp
 uname -s
+```
+![primera imagen](./imagenes_manual/Imagen%20de%20WhatsApp%202024-12-14%20a%20las%2020.28.10_531b7f68.jpg)
+
+```cpp
 dmesg
 ```
+![primera imagen](./imagenes_manual/Imagen%20de%20WhatsApp%202024-12-14%20a%20las%2020.27.42_1e8be9ff.jpg)
+
 
 
 
@@ -570,6 +576,8 @@ gcc -o test_syscall1 test_syscall1.c
 
 - Mostrara un en la terminal lo suguiente
 
+![primera imagen](./imagenes_manual/Imagen%20de%20WhatsApp%202024-12-14%20a%20las%2019.37.33_080045fc.jpg)
+
 
 Para la segunda prueba y poder verificar que las implementaciones estan correctas en el kernel, es necesario el siguiente archvio de prueba el cual se llama: test_syscall2.c
 
@@ -625,8 +633,6 @@ int main() {
     free(stats);
     return 0;
 }
-
-
 ```
 
 - Para compilar el test se debe de ir desde la terminal a la ruta donde se guardo el archivo test_syscall2.c y como administrador ejecutar los siguientes comandos:
@@ -635,11 +641,9 @@ int main() {
 gcc -o test_syscall2 test_syscall2.c
 ./test_syscall2
 ```
-
-
 - Mostrara un en la terminal lo suguiente
 
-
+![primera imagen](./imagenes_manual/Imagen%20de%20WhatsApp%202024-12-13%20a%20las%2017.31.30_260a7a79.jpg)
 
 <h1> Problemas </h1>
 
@@ -648,3 +652,15 @@ Tener en cuenta que al estar modificando cosas del kernel es muy facil poder ten
 - Entrar al group del sistema.
 - Entrar a las opciones avanzadas
 - Seleccionar el kernel por defecto, ya que el kernel por defecto esta separado del kernel que estamos modificando esto con el fin de poder tener un mejor control de los posibles errores y no se tenga que eliminar la maquina virtual.
+
+![primera imagen](./imagenes_manual/Imagen%20de%20WhatsApp%202024-12-13%20a%20las%2014.37.02_a0f7dbd5.jpg)
+
+Otro de los problemas puede ser que aparezca lo siguiente:
+
+![primera imagen](./imagenes_manual/Imagen%20de%20WhatsApp%202024-12-13%20a%20las%2021.19.40_b38e1653.jpg)
+
+Esto sucede porque en el archivo syscall_64.tbl no esta la llamada del syscall
+
+![primera imagen](./imagenes_manual/Imagen%20de%20WhatsApp%202024-12-14%20a%20las%2017.15.04_2219d1c6.jpg)
+
+Como se puede ver en la imagen, se debe de colocar las llamadas de las llamadas al sistema
