@@ -39,6 +39,14 @@ el arranque.
 + Desarrollar módulos del kernel que permitan obtener estadísticas del sistema
 
 
+<h1> Cronograma </h1>
+
+1. Dia 1: Compilación y modificación básica del kernel.
+2. Dia 2: Desarrollo de módulos personalizados del kernel.
+3. Dia 3-5: Creación de las syscalls en el kernel
+4. Dia 6: Pruebas y ajustes de la solución.
+5. Dia 7: Documentación final y presentación del proyecto.
+
 <h1>Pasos previos a modificar caracteristicas</h1>
 
 + Descargar la version 6.8.0 desde la pagina : www.kernel.org (descargar el tarball)
@@ -664,3 +672,14 @@ Esto sucede porque en el archivo syscall_64.tbl no esta la llamada del syscall
 ![primera imagen](./imagenes_manual/Imagen%20de%20WhatsApp%202024-12-14%20a%20las%2017.15.04_2219d1c6.jpg)
 
 Como se puede ver en la imagen, se debe de colocar las llamadas de las llamadas al sistema
+
+
+<h1> Reflexión personal </h1>
+
+Debo mejorar la gestión de mi tiempo, ya que no pude completar la práctica al 100%, ni realizar una búsqueda y lectura exhaustiva de la documentación disponible en internet.
+
+Es importante leer varias veces el enunciado de la práctica o proyecto, de manera que si surgen dudas, pueda consultarlas con el auxiliar durante el laboratorio.
+
+También debo evitar pensar en todo lo que se debe de hacer en el enunciado, ya que esto me genera ansiedad, pereza y estrés. Es mejor abordarlo poco a poco. Dividir el proyecto en tareas más pequeñas me permitirá avanzar de manera más ordenada y menos abrumada.
+
+Lo primero que debo hacer es realizar una investigación detallada sobre lo que debo hacer y luego comenzar con la implementación y las pruebas correspondientes.
