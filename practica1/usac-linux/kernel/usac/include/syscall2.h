@@ -1,0 +1,1 @@
+void track_syscall(int syscall_id);
