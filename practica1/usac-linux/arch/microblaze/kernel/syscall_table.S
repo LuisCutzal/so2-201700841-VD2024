@@ -7,3 +7,5 @@ ENTRY(sys_call_table)
 /* Agrega la nueva syscall a la tabla */
 .long sys_luis_capture_memory_snapshot
 
+/*Esto es para el proyecto 2 la segunda syscall*/
+.long sys_luis_recoleccion_general

@@ -434,3 +434,4 @@
 #553 common luis_get_io_throttle sys_luis_get_io_throttle
 #para el proyecto2
 554 common luis_tamalloc sys_luis_tamalloc
+555 common luis_recoleccion_general sys_luis_recoleccion_general
