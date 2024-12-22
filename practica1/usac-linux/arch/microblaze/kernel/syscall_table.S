@@ -9,3 +9,4 @@ ENTRY(sys_call_table)
 
 /*Esto es para el proyecto 2 la segunda syscall*/
 .long sys_luis_recoleccion_general
+.long sys_luis_resumen_total

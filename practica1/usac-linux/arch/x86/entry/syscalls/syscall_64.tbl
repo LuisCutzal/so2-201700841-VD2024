@@ -435,3 +435,4 @@
 #para el proyecto2
 554 common luis_tamalloc sys_luis_tamalloc
 555 common luis_recoleccion_general sys_luis_recoleccion_general
+556 common luis_resumen_total sys_luis_resumen_total

@@ -32,21 +32,29 @@ void check_page_faults(void *start, size_t size) {
     for (size_t i = 0; i < size / page_size; i++) {
         if (vec[i] == 0) {  // Si el bit es 0, significa que la página no está en memoria
             page_fault_count++;
-            printf("Page fault detected at address: %p\n", addr + i * page_size);
+            //printf("Page fault detected at address: %p\n", addr + i * page_size);
         }
     }
-
     free(vec);
     printf("Total page faults detected: %d\n", page_fault_count);
 }
 
 int main() {
+    size_t total_size;
     printf("Program for tamalloc PID: %d\n", getpid());
 
-    printf("Program to Allocate Memory using tamalloc. Press ENTER to continue...\n");
-    getchar();
+    // Solicitar al usuario el tamaño de la memoria en MB
+    printf("Ingrese el tamaño de memoria a asignar (en MB): ");
+    if (scanf("%zu", &total_size) != 1) {
+        perror("Invalid input");
+        return 1;
+    }
 
-    size_t total_size = 10 * 1024 * 1024; // 10 MB
+    // Convertir de MB a bytes (1 MB = 1024 * 1024 bytes)
+    total_size *= 1024 * 1024;
+
+    printf("Program to Allocate Memory using tamalloc. Press ENTER to continue...\n");
+    getchar(); // Para consumir el '\n' que queda en el buffer
 
     // Usamos la syscall tamalloc
     char *buffer = (char *)syscall(__NR_luis_tamalloc, total_size);
@@ -54,7 +62,7 @@ int main() {
         perror("tamalloc failed");
         return 1;
     }
-    printf("Allocated 10MB of memory using tamalloc at address: %p\n", buffer);
+    printf("Allocated %zu MB of memory using tamalloc at address: %p\n", total_size / (1024 * 1024), buffer);
 
     // Verificamos si se causaron "page faults" durante la asignación
     printf("Checking for page faults during memory allocation...\n");
