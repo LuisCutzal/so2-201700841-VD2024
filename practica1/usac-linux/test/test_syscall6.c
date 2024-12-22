@@ -17,14 +17,41 @@ long luis_resumen_total(struct memory_summary *summary) {
     return syscall(__NR_luis_resumen_total, summary);
 }
 
-// Función para imprimir el resumen de la memoria
 void print_memory_summary(struct memory_summary summary) {
-    printf("\nResumen de Memoria Total:\n");
-    printf("+----------------------------+----------------------------+\n");
-    printf("| Memoria Reservada (MB)     | Memoria Comprometida (MB)  |\n");
-    printf("+----------------------------+----------------------------+\n");
-    printf("| %-26lu | %-26lu |\n", summary.reserved_memory_mb, summary.committed_memory_mb);
-    printf("+----------------------------+----------------------------+\n");
+    const char* green = "\033[32m";   // Color verde
+    const char* yellow = "\033[33m";  // Color amarillo
+    const char* red = "\033[31m";     // Color rojo
+    const char* reset = "\033[0m";    // Reset de color
+
+    // Variables para el color de las columnas de memoria
+    const char* reserved_color;
+    const char* committed_color;
+
+    // Lógica para asignar color a la memoria reservada
+    if (summary.reserved_memory_mb < 1024) {
+        reserved_color = green;  // Verde si es menos de 1GB
+    } else if (summary.reserved_memory_mb < 2048) {
+        reserved_color = yellow; // Amarillo si está entre 1GB y 2GB
+    } else {
+        reserved_color = red;    // Rojo si es más de 2GB
+    }
+
+    // Lógica para asignar color a la memoria comprometida
+    if (summary.committed_memory_mb < 1024) {
+        committed_color = green;  // Verde si es menos de 1GB
+    } else if (summary.committed_memory_mb < 2048) {
+        committed_color = yellow; // Amarillo si está entre 1GB y 2GB
+    } else {
+        committed_color = red;    // Rojo si es más de 2GB
+    }
+
+    // Imprimir la información con colores
+    printf("\n%sResumen de Memoria Total:%s\n", green, reset);
+    printf("+----------------------------------+------------------------------------+\n");
+    printf("| %sMemoria Reservada (VmSize MB)%s    | %sMemoria Comprometida (VmRSS MB)%s    |\n", yellow, reset, yellow, reset);
+    printf("+----------------------------------+------------------------------------+\n");
+    printf("| %-26s%-4lu%s        | %-26s%-4lu%s       |\n", reserved_color, summary.reserved_memory_mb, reset, committed_color, summary.committed_memory_mb, reset);
+    printf("+----------------------------------+------------------------------------+\n");
 }
 
 int main() {
@@ -43,3 +70,8 @@ int main() {
 
     return 0;
 }
+
+
+
+// gcc -o test_syscall6 test_syscall6.c
+//  ./test_syscall6
