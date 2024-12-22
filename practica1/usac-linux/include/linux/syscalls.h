@@ -973,7 +973,7 @@ asmlinkage long sys_luis_get_io_throttle(pid_t pid, struct io_throttle_stats __u
 
 //esto es del proyecto 2
 asmlinkage long sys_luis_tamalloc(size_t size);
-
+asmlinkage long sys_luis_recoleccion_general(pid_t pid);
 
 
 

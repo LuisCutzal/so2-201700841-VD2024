@@ -101,3 +101,5 @@ int main() {
 
 // gcc -o test_syscall4 test_syscall4.c
 //  strace ./test_syscall4
+// watch -n 0.5 "cat /proc/PID/status | grep -E 'VmRSS|VmSize'"
+//  cat /proc/PID/status

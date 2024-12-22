@@ -10,11 +10,19 @@
 #define KB (1024)
 #define MB (1024 * 1024)
 
-// Definir el número de la nueva syscall
 #define __NR_luis_recoleccion_general 555
 
+// Estructura para almacenar la información de memoria del proceso
+struct process_memory_info {
+    unsigned long reserved_memory_kb;   // Memoria reservada en KB
+    unsigned long committed_memory_kb;  // Memoria comprometida en KB
+    unsigned long used_memory_kb;       // Memoria usada en KB
+    int oom_score;                      // OOM score
+    int percentage_used_memory;         // Porcentaje de memoria usada
+};
+
 // Función de la syscall que obtiene la información de un proceso
-SYSCALL_DEFINE1(luis_recoleccion_general, pid_t, pid) {
+SYSCALL_DEFINE2(luis_recoleccion_general, pid_t, pid, struct process_memory_info __user *, mem_info) {
     struct task_struct *task;
     struct mm_struct *mm;
     unsigned long reserved_memory, committed_memory, used_memory_kb;
@@ -38,8 +46,8 @@ SYSCALL_DEFINE1(luis_recoleccion_general, pid_t, pid) {
     reserved_memory = mm->total_vm * PAGE_SIZE / KB;  // total_vm es en páginas, convertimos a KB
     reserved_memory_kb = reserved_memory;
 
-    // Obtener la memoria comprometida (en KB)
-    committed_memory = mm->shared_vm * PAGE_SIZE / KB;  // memoria compartida, esto depende de tu caso específico
+    // Obtener la memoria utilizada (RSS, en KB)
+    committed_memory = get_mm_rss(mm) * PAGE_SIZE / KB;  // memoria residente
     used_memory_kb = committed_memory;
 
     // Obtener el OOM score
@@ -52,12 +60,12 @@ SYSCALL_DEFINE1(luis_recoleccion_general, pid_t, pid) {
         percentage_used_memory = 0;  // Si no hay memoria reservada, el porcentaje es 0
     }
 
-    // Imprimir la información de memoria en el kernel log
-    printk(KERN_INFO "PID: %d\n", pid);
-    printk(KERN_INFO "Reserved Memory: %lu KB (%lu MB)\n", reserved_memory_kb, reserved_memory_kb / MB);
-    printk(KERN_INFO "Committed Memory: %lu KB (%lu MB)\n", used_memory_kb, used_memory_kb / MB);
-    printk(KERN_INFO "Used Memory: %d%% of reserved memory\n", percentage_used_memory);
-    printk(KERN_INFO "OOM Score: %d\n", oom_score);
+    // Copiar los resultados a la estructura proporcionada por el espacio de usuario
+    if (copy_to_user(mem_info, &(struct process_memory_info) {
+        reserved_memory_kb, committed_memory, used_memory_kb, oom_score, percentage_used_memory
+    }, sizeof(struct process_memory_info))) {
+        return -EFAULT;  // Error al copiar los datos al espacio de usuario
+    }
 
     // Retornar 0 si todo fue exitoso
     return 0;
