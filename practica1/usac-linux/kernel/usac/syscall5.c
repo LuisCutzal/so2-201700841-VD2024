@@ -7,6 +7,7 @@
 #include <linux/stat.h>
 #include <linux/uaccess.h>  // Para la manipulación de datos de usuarios
 #include <linux/mmzone.h>   // Para obtener la memoria total del sistema
+#include <linux/sysinfo.h> // Para si_meminfo
 
 #define KB (1024)
 #define MB (1024 * 1024)
@@ -31,6 +32,7 @@ SYSCALL_DEFINE2(luis_recoleccion_general, pid_t, pid, struct process_memory_info
     int oom_score;
     unsigned long reserved_memory_kb;
     int percentage_used_memory;
+    struct sysinfo si;  // Estructura para obtener información del sistema
 
     // Buscar el task_struct del proceso usando el PID
     task = pid_task(find_vpid(pid), PIDTYPE_PID);
@@ -59,8 +61,9 @@ SYSCALL_DEFINE2(luis_recoleccion_general, pid_t, pid, struct process_memory_info
         percentage_used_memory = 0;  // Si no hay memoria reservada, el porcentaje es 0
     }
 
-    // Obtener la memoria total del sistema (en KB)
-    total_memory_kb = totalram_pages * PAGE_SIZE / KB;
+    // Obtener la memoria total del sistema (en KB) usando si_meminfo
+    si_meminfo(&si);
+    total_memory_kb = si.totalram * si.mem_unit / KB;
 
     // Calcular el OOM score manualmente
     if (total_memory_kb > 0) {
