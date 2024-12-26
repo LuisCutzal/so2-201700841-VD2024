@@ -971,6 +971,12 @@ asmlinkage long sys_luis_capture_memory_snapshot(struct memory_snapshot __user *
 asmlinkage long sys_luis_track_syscall_usage(void); //para la syscall2.c
 asmlinkage long sys_luis_get_io_throttle(pid_t pid, struct io_throttle_stats __user *stats); //para la syscall3.c
 
+//esto es del proyecto 2
+asmlinkage long sys_luis_tamalloc(size_t size);
+asmlinkage long sys_luis_recoleccion_general(pid_t pid);
+asmlinkage long sys_luis_resumen_total(struct memory_summary __user *summary);
+
+
 
 /*
  * Architecture-specific system calls
