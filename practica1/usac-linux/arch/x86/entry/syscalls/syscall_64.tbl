@@ -432,3 +432,12 @@
 551 common luis_capture_memory_snapshot sys_luis_capture_memory_snapshot
 552 common luis_track_syscall_usage sys_luis_track_syscall_usage
 #553 common luis_get_io_throttle sys_luis_get_io_throttle
+#para el proyecto2
+554 common luis_tamalloc sys_luis_tamalloc
+555 common luis_recoleccion_general sys_luis_recoleccion_general
+556 common luis_resumen_total sys_luis_resumen_total
+#para el proyecto3
+557 common so2_add_memory_limit sys_so2_add_memory_limit
+558 common so2_get_memory_limits sys_so2_get_memory_limits
+559 common so2_update_memory_limit sys_so2_update_memory_limit
+#560 common so2_remove_memory_limit sys_so2_remove_memory_limit

@@ -41,11 +41,14 @@ el arranque.
 
 <h1> Cronograma </h1>
 
-1. Dia 1: Compilación y modificación básica del kernel.
-2. Dia 2: Desarrollo de módulos personalizados del kernel.
-3. Dia 3-5: Creación de las syscalls en el kernel
-4. Dia 6: Pruebas y ajustes de la solución.
-5. Dia 7: Documentación final y presentación del proyecto.
+| **Día** | **Actividad**                                      |
+|---------|----------------------------------------------------|
+| Día 1   | Compilación y modificación básica del kernel.      |
+| Día 2   | Investigación para agregar nuevas syscalls en el kernel de linux      |
+| Día 3   | No pude trabajar, estaba haciendo proyecto del laboratorio de bases de datos 2      |
+| Día 4-6 | Creacion de la syscall en el kernel, pruebas y creación de módulos         |
+| Día 7   | Documentación final y presentación del proyecto.   |
+
 
 <h1>Pasos previos a modificar caracteristicas</h1>
 
@@ -528,6 +531,82 @@ track_syscall(__NR_write);
 
 - Como paso final debe de recompilar el kernel, utilizando el archivo: ./compile_and_install.sh
 
+<h2>get_io_throttle</h2>
+
+- Descripción: Esta llamada permite al usuario obtener información estadística de uso de
+I/O de cada proceso. Por ejemplo, cantidad de bytes escrita, cantidad de bytes leída,
+cantidad de bytes escrita a disco, cantidad de bytes leída de disco, tiempo esperando
+completación de operación I/O, entre otros. Queda a discreción del estudiante que
+estadísticas usar exactamente, deben ser por lo menos 5 relevantes.
+
+<h3> Implementación </h3>
+
+- Primero sera crear la ruta para el archivo: "syscall_64.tbl" el cual contendra nuestra primera syscall, teniendo en cuenta que el archivo se ubica en
+- arch/x86/entry/syscalls/syscall_64.tbl
+
+se modifica hasta el final del archivo.
+
+``` cpp
+553 common luis_get_io_throttle sys_luis_get_io_throttle
+```
+- Agregar en el archivo "syscalls.h" lo siguiente y tomando en cuenta que debe de ser seguido de la anterior modificacion.
+``` cpp
+asmlinkage long sys_luis_get_io_throttle(pid_t pid, struct io_throttle_stats __user *stats); //para la syscall3.c
+```
+
+- Dentro de la carpeta donde se creo el archivo "syscall1.c" y el archivo "syscall2.cse crea un nuevo archivo llamado "syscall3.c" con lo siguiente:
+
+``` cpp
+#include <linux/kernel.h>
+#include <linux/syscalls.h>
+#include <linux/fs.h>
+#include <linux/sched.h>
+#include <linux/uaccess.h>
+#include <linux/io_uring.h>  // Para operaciones I/O
+#include <linux/blkdev.h>    // Para estadísticas de disco
+#include "syscall3.h"  // Estructura io_throttle_stats
+
+/*
+ * Implementación de la syscall para obtener las estadísticas de I/O de un proceso.
+ */
+SYSCALL_DEFINE1(luis_get_io_throttle, pid_t, pid, struct io_throttle_stats __user *, stats)
+{
+    struct task_struct *task;
+    struct io_throttle_stats kernel_stats = {0};
+    struct task_io_accounting ioac;
+
+    // Obtener el proceso con el PID dado
+    task = get_pid_task(find_vpid(pid), PIDTYPE_PID);
+    if (!task) {
+        pr_err("Proceso no encontrado\n");
+        return -ESRCH;
+    }
+
+    // Obtener las estadísticas de I/O del proceso
+    ioac = task->ioac;
+
+    // Asignar los valores de las estadísticas a la estructura
+    kernel_stats.read_bytes = ioac.read_bytes;
+    kernel_stats.write_bytes = ioac.write_bytes;
+    kernel_stats.read_disk_bytes = ioac.read_disk_bytes;
+    kernel_stats.write_disk_bytes = ioac.write_disk_bytes;
+    kernel_stats.io_wait_time = ioac.io_wait_time;
+
+    // Copiar los datos al espacio de usuario
+    if (copy_to_user(stats, &kernel_stats, sizeof(struct io_throttle_stats))) {
+        pr_err("Error al copiar los datos al espacio de usuario.\n");
+        return -EFAULT;
+    }
+
+    pr_info("Syscall get_io_throttle ejecutada exitosamente para el proceso %d.\n", pid);
+    return 0;
+}
+```
+- En el archvio "Makefile" ubicado en la ruta: kernel/usac/Makefile colocar:
+
+```cpp
+obj-y += syscall3.o
+```
 <h2>Hacer pruebas</h2>
 
 
@@ -653,7 +732,158 @@ gcc -o test_syscall2 test_syscall2.c
 
 ![primera imagen](./imagenes_manual/Imagen%20de%20WhatsApp%202024-12-13%20a%20las%2017.31.30_260a7a79.jpg)
 
-<h1> Problemas </h1>
+
+
+<h1> Creación de módulos</h1>
+
+- Lo primero para tener un orden es crear una carpeta y dejar los archivos de los modulos dentro de las carpetas.
+
+<h2> Módulo para las estadísticas de CPU, estadísticas de memoria y estadísticas de almacenamiento</h2>
+
+- Para fines de proyecto y simplicidad, se crea unas carpetas dentro de test: test/modulo/modulo_cpu_ram
+
+- se crea un archivo llamado stats_module.c y dentro tendra el siguiente codigo:
+
+```cpp
+#include <linux/init.h>
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
+#include <linux/fs.h>
+#include <linux/mm.h>
+#include <linux/statfs.h>
+#include <linux/uaccess.h>
+#include <linux/namei.h>
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Luis Antonio Cutzal Chali");
+MODULE_DESCRIPTION("Modulo para estadisticas de CPU, memoria y almacenamiento");
+MODULE_VERSION("1.0");
+
+#define PARTITION_PATH "/"
+
+static int mostrar_estadisticas(struct seq_file *m, void *v) {
+    // Estadísticas de CPU
+    struct file *file;
+    char buf[256];
+    ssize_t read_bytes;
+    unsigned long long user, nice, system, idle, iowait, irq, softirq, steal;
+    unsigned long long total, busy;
+
+    file = filp_open("/proc/stat", O_RDONLY, 0);
+    if (IS_ERR(file)) {
+        seq_printf(m, "Error leyendo /proc/stat\n");
+        return -1;
+    }
+
+    read_bytes = kernel_read(file, buf, sizeof(buf) - 1, &file->f_pos);
+    filp_close(file, NULL);
+
+    if (read_bytes > 0) {
+        buf[read_bytes] = '\0';
+        sscanf(buf, "cpu %llu %llu %llu %llu %llu %llu %llu %llu",
+               &user, &nice, &system, &idle, &iowait, &irq, &softirq, &steal);
+        total = user + nice + system + idle + iowait + irq + softirq + steal;
+        busy = total - idle;
+        seq_printf(m, "CPU Usage: %llu%%\n", busy * 100 / total);
+    } else {
+        seq_printf(m, "Error leyendo datos de CPU\n");
+    }
+
+    // Estadísticas de Memoria desde /proc/meminfo
+    struct file *mem_file;
+    char mem_buf[256];
+    unsigned long total_mem = 0, free_mem = 0;
+
+    mem_file = filp_open("/proc/meminfo", O_RDONLY, 0);
+    if (!IS_ERR(mem_file)) {
+        read_bytes = kernel_read(mem_file, mem_buf, sizeof(mem_buf) - 1, &mem_file->f_pos);
+        filp_close(mem_file, NULL);
+        if (read_bytes > 0) {
+            mem_buf[read_bytes] = '\0';
+            sscanf(mem_buf, "MemTotal: %lu kB\nMemFree: %lu kB\n", &total_mem, &free_mem);
+        }
+    }
+    seq_printf(m, "Memory Total: %lu KB\n", total_mem);
+    seq_printf(m, "Memory Free: %lu KB\n", free_mem);
+
+    // Estadísticas de Almacenamiento
+    struct kstatfs stat;
+    struct path path;
+
+    if (kern_path(PARTITION_PATH, LOOKUP_FOLLOW, &path) == 0) {
+        if (vfs_statfs(&path, &stat) == 0) {
+            unsigned long long total_space = (stat.f_blocks * stat.f_bsize) >> 10; // KB
+            unsigned long long free_space = (stat.f_bfree * stat.f_bsize) >> 10;   // KB
+            seq_printf(m, "Storage Total: %llu KB\n", total_space);
+            seq_printf(m, "Storage Free: %llu KB\n", free_space);
+        } else {
+            seq_printf(m, "Error obteniendo estadísticas de almacenamiento\n");
+        }
+        path_put(&path);
+    } else {
+        seq_printf(m, "Error obteniendo el path para %s\n", PARTITION_PATH);
+    }
+
+    return 0;
+}
+
+static int abrir_proc(struct inode *inode, struct file *file) {
+    return single_open(file, mostrar_estadisticas, NULL);
+}
+
+static const struct proc_ops proc_ops = {
+    .proc_open = abrir_proc,
+    .proc_read = seq_read,
+    .proc_lseek = seq_lseek,
+    .proc_release = single_release,
+};
+
+static int __init stats_module_init(void) {
+    proc_create("stats_module", 0, NULL, &proc_ops);
+    pr_info("Modulo de estadisticas cargado correctamente\n");
+    return 0;
+}
+
+static void __exit stats_module_exit(void) {
+    remove_proc_entry("stats_module", NULL);
+    pr_info("Modulo de estadisticas eliminado\n");
+}
+
+module_init(stats_module_init);
+module_exit(stats_module_exit);
+```
+
+- Crear un archivo Makefile y dentro copiar lo siguiente:
+
+```Makefile
+# Este Makefile compila un módulo de kernel llamado stats_module.c
+
+# Nombre del módulo
+obj-m += stats_module.o
+
+# Instrucciones para compilar
+all:
+	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
+
+# Instrucciones para limpiar los archivos generados
+clean:
+	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
+```
+
+- Luego dentro de la ruta donde se crearon estos 2 archivos abrir una terminal como super usuario y escribir el comando: "make"
+
+- Despues de eso escribir el comando: insmod stats_module.ko esto hara que se cargue el modulo al sistema, tener en cuenta que el nombre stats_module.ko puede cambiar ya que ese nombre se le dio por el nombre del archivo stats_module.c que creamos anteriormente.
+
+- Y finalmente el comando: cat /proc/stats_module el cual nos ayudara a ejecutar el modulo que hemos creado y devolver la informacion de nuestro sistema.
+
+![primera imagen](./imagenes_manual/Screenshot%20from%202024-12-15%2020-17-16.png)
+
+- Para eliminar el modulo es necesario escribir el siguiente comando: rmmod stats_module
+
+
+<h1> Resolución de problemas y manejo de dificultades </h1>
 
 Tener en cuenta que al estar modificando cosas del kernel es muy facil poder tener errores en la compilacion y esto haga que no podamos entrar a nuestro kernel, se debe de seguir los siguientes pasos:
 
@@ -673,8 +903,12 @@ Esto sucede porque en el archivo syscall_64.tbl no esta la llamada del syscall
 
 Como se puede ver en la imagen, se debe de colocar las llamadas de las llamadas al sistema
 
+- Al no haber cargado el modulo con el comando: insmod stats_module.ko y utilizar el comando: cat /proc/stats_module mostrara un error
 
-<h1> Reflexión personal </h1>
+![primera imagen](./imagenes_manual/Screenshot%20from%202024-12-15%2020-21-25.png)
+
+
+<h1> Reflexión personal y autoevaluación</h1>
 
 Debo mejorar la gestión de mi tiempo, ya que no pude completar la práctica al 100%, ni realizar una búsqueda y lectura exhaustiva de la documentación disponible en internet.
 
