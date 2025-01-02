@@ -976,7 +976,11 @@ asmlinkage long sys_luis_tamalloc(size_t size);
 asmlinkage long sys_luis_recoleccion_general(pid_t pid);
 asmlinkage long sys_luis_resumen_total(struct memory_summary __user *summary);
 
-
+//esto es para el proyecto 3
+asmlinkage long sys_so2_add_memory_limit(pid_t process_pid, size_t memory_limit);
+asmlinkage long sys_so2_get_memory_limits(struct memory_limitation __user *u_processes_buffer, size_t max_entries, int __user *processes_returned);
+asmlinkage long sys_so2_update_memory_limit(pid_t process_pid, size_t memory_limit);
+// asmlinkage long sys_so2_remove_memory_limit(pid_t process_pid);
 
 /*
  * Architecture-specific system calls
