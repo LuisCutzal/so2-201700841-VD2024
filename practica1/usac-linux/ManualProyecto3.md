@@ -260,10 +260,65 @@ obj-y += syscall7.o
 - Se crea una carpeta llamada project3 y dentro de ella se coloca el archivo: "syscall7.c" con lo siguiente.
 
 ```cpp
+SYSCALL_DEFINE2(so2_add_memory_limit, pid_t, process_pid, size_t, memory_limit) {
+    struct memory_limitation *entry;
+    struct task_struct *task;
+    struct mm_struct *mm;
 
+    // Validar entrada: PID negativo o memoria negativa
+    if (process_pid <= 0 || memory_limit <= 0) {
+        return -EINVAL;  // Devolver error EINVAL
+    }
 
+    // Verificar permisos de usuario
+    if (!capable(CAP_SYS_ADMIN)) {
+        return -EPERM;  // Devolver error EPERM
+    }
 
+    // Buscar el proceso
+    task = pid_task(find_vpid(process_pid), PIDTYPE_PID);
+    if (!task) {
+        return -ESRCH;  // Devolver error ESRCH si el proceso no existe
+    }
 
+    // Verificar memoria usada
+    mm = task->mm;
+    if (!mm) {
+        return -ESRCH;  // Devolver error ESRCH si no se encuentra el mm del proceso
+    }
+    if (get_mm_rss(mm) * PAGE_SIZE / 1024 > memory_limit) { // Convertimos a KB
+        return -100;  // Devolver error -100 si el proceso excede el límite
+    }
+
+    // Bloquear la lista para acceso seguro
+    mutex_lock(&memory_limit_lock);
+
+    // Verificar si ya existe el proceso en la lista
+    list_for_each_entry(entry, &memory_limit_list, list) {
+        if (entry->pid == process_pid) {
+            mutex_unlock(&memory_limit_lock);
+            return -101;  // Devolver error -101 si el proceso ya está en la lista
+        }
+    }
+
+    // Crear nueva entrada en la lista
+    entry = kmalloc(sizeof(*entry), GFP_KERNEL);
+    if (!entry) {
+        mutex_unlock(&memory_limit_lock);
+        return -ENOMEM;  // Devolver error ENOMEM si no hay memoria para el nodo
+    }
+    entry->pid = process_pid;
+    entry->memory_limit = memory_limit;
+    INIT_LIST_HEAD(&entry->list);
+
+    // Agregar la entrada a la lista
+    list_add(&entry->list, &memory_limit_list);
+
+    // Desbloquear la lista
+    mutex_unlock(&memory_limit_lock);
+
+    return 0; // Éxito
+}
 ```
 
 - Como paso final debe de recompilar el kernel, utilizando el archivo: ./compile_and_install.sh
@@ -307,7 +362,73 @@ asmlinkage long sys_so2_get_memory_limits(struct memory_limitation __user *u_pro
 - Deontro del archivo "syscall7.c" se agrega lo siguiente:
 
 ```cpp
+SYSCALL_DEFINE3(so2_get_memory_limits, 
+                     struct memory_limitation*, u_processes_buffer, 
+                     size_t, max_entries, 
+                     int*, processes_returned) {
+    struct memory_limitation *kernel_buffer;
+    struct memory_limitation *entry;
+    size_t count = 0;
+    int result;
 
+    // Validar entradas
+    if (max_entries <= 0 || !u_processes_buffer || !processes_returned) {
+        return -EINVAL;
+    }
+
+    // Bloquear lista para acceso seguro
+    mutex_lock(&memory_limit_lock);
+
+    // Contar los procesos limitados
+    list_for_each_entry(entry, &memory_limit_list, list) {
+        count++;
+    }
+
+    // Ajustar el número máximo al límite del buffer proporcionado
+    if (count > max_entries) {
+        count = max_entries;
+    }
+
+    // Reservar espacio en el kernel para el buffer
+    kernel_buffer = kmalloc_array(count, sizeof(struct memory_limitation), GFP_KERNEL);
+    if (!kernel_buffer) {
+        mutex_unlock(&memory_limit_lock);
+        return -ENOMEM;
+    }
+
+    // Copiar los procesos limitados al buffer del kernel
+    count = 0;
+    list_for_each_entry(entry, &memory_limit_list, list) {
+        if (count >= max_entries) {
+            break;
+        }
+        kernel_buffer[count].pid = entry->pid;
+        kernel_buffer[count].memory_limit = entry->memory_limit;
+        count++;
+    }
+
+    // Desbloquear la lista
+    mutex_unlock(&memory_limit_lock);
+
+    // Copiar datos del kernel al espacio de usuario
+    result = copy_to_user(u_processes_buffer, kernel_buffer, count * sizeof(struct memory_limitation));
+    if (result) {
+        kfree(kernel_buffer);
+        return -EFAULT;
+    }
+
+    // Copiar la cantidad de procesos retornados al espacio de usuario
+    result = put_user(count, processes_returned);
+    if (result) {
+        kfree(kernel_buffer);
+        return -EFAULT;
+    }
+
+    // Liberar el buffer del kernel
+    kfree(kernel_buffer);
+
+    return 0; // Éxito
+}
 ```
 - En el archvio "Makefile" no se modifica
 - Crear la ruta microblaze/kernel y dentro el archivo syscall_table.S y colocar en las ultimas lineas el siguiente comando:
@@ -355,11 +476,61 @@ asmlinkage long sys_so2_update_memory_limit(pid_t process_pid, size_t memory_lim
 - Dentro del archivo "syscall7.c" agregar lo siguiente:
 
 ```cpp
- 
+long SYSCALL_DEFINE2(so2_update_memory_limit, pid_t, process_pid, size_t, memory_limit) {
+    struct memory_limitation *entry;
+    struct task_struct *task;
+    struct mm_struct *mm;
 
+    // Validaciones de entrada
+    if (process_pid <= 0 || memory_limit <= 0) {
+        set_errno(EINVAL);
+        return -EINVAL;
+    }
 
+    // Verificar permisos de usuario
+    if (!capable(CAP_SYS_ADMIN)) {
+        set_errno(EPERM);
+        return -EPERM;
+    }
 
+    // Buscar el proceso en el sistema
+    task = pid_task(find_vpid(process_pid), PIDTYPE_PID);
+    if (!task) {
+        set_errno(ESRCH);
+        return -ESRCH;
+    }
 
+    // Obtener memoria usada por el proceso
+    mm = task->mm;
+    if (!mm) {
+        set_errno(ESRCH);
+        return -ESRCH;
+    }
+    if (get_mm_rss(mm) * PAGE_SIZE / 1024 > memory_limit) { // Convertimos a KB
+        set_errno(100); // Código de error personalizado
+        return -100;
+    }
+
+    // Bloquear la lista para acceso seguro
+    mutex_lock(&memory_limit_lock);
+
+    // Buscar en la lista global
+    list_for_each_entry(entry, &memory_limit_list, list) {
+        if (entry->pid == process_pid) {
+            // Actualizar el límite de memoria
+            entry->memory_limit = memory_limit;
+            mutex_unlock(&memory_limit_lock);
+            return 0; // Éxito
+        }
+    }
+
+    // Desbloquear la lista si no se encontró el proceso
+    mutex_unlock(&memory_limit_lock);
+
+    // Proceso no encontrado en la lista
+    set_errno(102); // Código de error personalizado
+    return -102;
+}
 ```
 En el archvio "Makefile" no se debe de modificar:
 
@@ -406,11 +577,47 @@ asmlinkage long sys_so2_remove_memory_limit(pid_t process_pid);
 - Dentro del archivo "syscall7.c" agregar lo siguiente:
 
 ```cpp
- 
+ SYSCALL_DEFINE1(so2_remove_memory_limit, pid_t, process_pid) {
+    struct memory_limitation *entry, *tmp;
+    int found = 0;
 
+    // Validar que el PID sea positivo
+    if (process_pid <= 0) {
+        set_errno(EINVAL);
+        return -EINVAL;
+    }
 
+    // Verificar si el usuario es un sudoer
+    if (!capable(CAP_SYS_ADMIN)) {
+        set_errno(EPERM);
+        return -EPERM;
+    }
 
+    // Bloquear la lista para acceso seguro
+    mutex_lock(&memory_limit_lock);
 
+    // Buscar el proceso en la lista
+    list_for_each_entry_safe(entry, tmp, &memory_limit_list, list) {
+        if (entry->pid == process_pid) {
+            // Encontrado el proceso, eliminarlo
+            list_del(&entry->list);
+            kfree(entry);  // Liberar la memoria asignada
+            found = 1;
+            break;
+        }
+    }
+
+    // Desbloquear la lista
+    mutex_unlock(&memory_limit_lock);
+
+    // Si no se encontró el proceso en la lista, devolver error -102
+    if (!found) {
+        set_errno(ESRCH);
+        return -102;
+    }
+
+    return 0;  // Éxito
+}
 ```
 En el archvio "Makefile" no se debe de modificar:
 
@@ -421,257 +628,145 @@ En el archvio "Makefile" no se debe de modificar:
 .long sys_so2_remove_memory_limit
 ```
 
-
-
-
-
 <h1>Hacer pruebas</h1>
 
 
-Para la primera prueba y poder verificar que las implementaciones estan correctas en el kernel, es necesario el siguiente archvio de prueba el cual se llama: test_syscall4.c
+Para la primera prueba y poder verificar que las implementaciones estan correctas en el kernel, es necesario el siguiente archvio de prueba el cual se llama: test_syscall7.c, este test es un ejemplo compartido por el auxiliar del curso.
 
 ```cpp
+#include <stdio.h>
+#include <unistd.h>
+#include <sys/syscall.h>
+#include <errno.h>
+#include <stdlib.h>
+
+#define SYS_MATUS_ADD_MEMORY_LIMIT 557
+#define SYS_MATUS_GET_MEMORY_LIMITS 558
+#define SYS_MATUS_UPDATE_MEMORY_LIMIT 559
+#define SYS_MATUS_REMOVE_MEMORY_LIMIT 560
+
+struct memory_limitation {
+	pid_t pid;
+	size_t memory_limit;
+};
+
+void add_memory_limit(pid_t pid, size_t memory_limit) {
+	//TODO Chequeo de errores como en el enunciado
+
+	if (syscall(SYS_MATUS_ADD_MEMORY_LIMIT, pid, memory_limit) < 0) {  //FIXME != 0
+		perror("SYS_MATUS_ADD_MEMORY_LIMIT");
+		return;
+	}
+	printf("Memory limit added for PID %d %zu bytes \n", pid, memory_limit);
+}
+
+void get_memory_limits(size_t max_entries) {
+	struct memory_limitation *buffer = malloc(max_entries * sizeof(struct memory_limitation));
+	int processes_returned;
+
+	if (!buffer) {
+		perror("Allocation for memory_limitation buffer failed");
+		return;
+	}
+
+	if (syscall(SYS_MATUS_GET_MEMORY_LIMITS, buffer, max_entries, &processes_returned) < 0) {  //FIXME != 0
+		perror("SYS_MATUS_GET_MEMORY_LIMITS");
+		free(buffer);
+		return;
+	}
+
+	printf("Restricted proccesses memory succesfully:\n");
+	for (int i = 0; i < processes_returned; ++i) {
+		printf("PID: %d, Memory Limit: %zu bytes\n", buffer[i].pid, buffer[i].memory_limit);
+	}
+	free(buffer);
+}
+
+void update_memory_limit(pid_t pid, size_t memory_limit) {
+	if (syscall(SYS_MATUS_UPDATE_MEMORY_LIMIT, pid,  memory_limit) < 0) {  //FIXME != 0
+		perror("SYS_MATUS_UPDATE_MEMORY_LIMIT");
+		return;
+	}
+	printf("Memory limit for PID %d updated to %zu \n", pid, memory_limit);
+}
 
 
+void remove_memory_limit(pid_t pid) {
+	if (syscall(SYS_MATUS_REMOVE_MEMORY_LIMIT, pid) < 0) {  //FIXME != 0
+		perror("SYS_MATUS_REMOVE_MEMORY_LIMIT");
+		return;
+	}
+	printf("Memory limit for PID %d removed\n", pid);
+}
 
+int main() {
+	int choice;
+	pid_t pid;
+	size_t memory_limit;
+	size_t max_entries;
 
+	while (1) {
+		printf("-----------------------------------------------------------------\n");
+		printf("\nMemory Limitation for Project 3 SO2 VD2024\n");
+		printf("1. Add Memory Limit\n");
+		printf("2. Get Memory Limit\n");
+		printf("3. Update Memory Limit\n");
+		printf("4. Remove Memory Limit\n");
+		printf("5. Exit\n");
+		printf("Enter a number option to proceed\n");
+		scanf("%d", &choice);
+		printf("-----------------------------------------------------------------\n");
+
+		switch(choice) {
+			case 1:
+				printf("Enter PID:");
+				scanf("%d", &pid);
+				printf("Enter Memory limit in KB:");
+				scanf("%zu", &memory_limit);
+				memory_limit *= 1024;
+				add_memory_limit(pid, memory_limit);
+				break;
+			case 2:
+				printf("Enter Max entries to receive:");
+				scanf("%zu", &max_entries);
+				get_memory_limits(max_entries);
+				break;
+			case 3:
+				printf("Enter PID:");
+				scanf("%d", &pid);
+				printf("Enter Memory limit in KB:");
+				scanf("%zu", &memory_limit);
+				memory_limit *= 1024;
+				update_memory_limit(pid, memory_limit);
+				break;
+			case 4:
+				printf("Enter PID to remove limit:");
+				scanf("%d", &pid);
+				remove_memory_limit(pid);
+				break;
+			case 5:
+				printf("Exiting...\n");
+				return 0;
+				break;
+			default:
+				printf("Invalid option. Try again!");
+		}
+	}
+	return 0;
+}
 ```
 - Para compilar el test se debe de ir desde la terminal a la ruta donde se guardo el archivo test_syscall1.c y como administrador ejecutar los siguientes comandos:
 
 ```cpp
-gcc -o test_syscall4 test_syscall4.c
-./test_syscall4
+gcc -o test_syscall7 test_syscall7.c
+./test_syscall7
 ```
 
-- Mostrara un en la terminal lo suguiente
+- Mostrara un en la terminal con un menú
 
-![primera imagen](./imagenes_manual/pro2_1.png)
+- Sera necesario escribir el tamaño de la memoria que queremos y precionar "Enter"
 
-- sera necesario escribir el tamaño de la memoria que queremos y precionar "Enter"
-
-![primera imagen](./imagenes_manual/pro2_2.png)
-
-- como ultimo paso precionar la tecla "Enter" nuevamente 
-
-![primera imagen](./imagenes_manual/pro2_3.png)
-
-Para la segunda prueba y poder verificar que las implementaciones estan correctas en el kernel, es necesario el siguiente archvio de prueba el cual se llama: test_syscall5.c
-
-```cpp
-#include <stdio.h>
-#include <sys/syscall.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <stdlib.h>
-
-#define __NR_luis_recoleccion_general 555
-
-// Estructura para almacenar la información de memoria
-struct process_memory_info {
-    unsigned long reserved_memory_kb;
-    unsigned long committed_memory_kb;
-    unsigned long used_memory_kb;
-    int oom_score;
-    int percentage_used_memory;
-};
-
-// Declaración de la syscall
-long luis_recoleccion_general(pid_t pid, struct process_memory_info *mem_info) {
-    return syscall(__NR_luis_recoleccion_general, pid, mem_info);
-}
-
-// Función para imprimir todos los procesos en una tabla
-void print_all_memory_info() {
-    // Colores ANSI
-    const char* green = "\033[32m";
-    const char* yellow = "\033[33m";
-    const char* red = "\033[31m";
-    const char* reset = "\033[0m";
-
-    // Encabezado de la tabla
-    printf("\n%s+-------+----------------------+------------------------+------------------------+------------------+-------------------------+%s\n", green, reset);
-    printf("| %-5s | %-20s | %-22s | %-22s | %-16s | %-23s |\n", "PID", "Reservada (KB)", "Comprometida (KB)", "Usada (KB)", "OOM Score", "Porcentaje Usada (%)");
-    printf("+-------+----------------------+------------------------+------------------------+------------------+-------------------------+\n");
-
-    struct process_memory_info mem_info;
-    long result;
-
-    // Iterar sobre un rango razonable de PIDs
-    for (pid_t pid = 1; pid <= 32768; pid++) {
-        // Llamar a la syscall para obtener la recolección de memoria
-        result = luis_recoleccion_general(pid, &mem_info);
-        if (result < 0) {
-            continue; // Ignorar procesos donde falle la syscall
-        }
-
-        // Calcular el color del porcentaje de memoria usada
-        const char* used_color;
-        if (mem_info.percentage_used_memory < 50) {
-            used_color = green;
-        } else if (mem_info.percentage_used_memory < 80) {
-            used_color = yellow;
-        } else {
-            used_color = red;
-        }
-
-        // Imprimir la información del proceso en una fila
-        printf("| %-5d | %-20lu | %-22lu | %-22lu | %-16d | %s%-3d%%%s                |\n",
-               pid,
-               mem_info.reserved_memory_kb,
-               mem_info.committed_memory_kb,
-               mem_info.used_memory_kb,
-               mem_info.oom_score,
-               used_color, mem_info.percentage_used_memory, reset);
-    }
-
-    // Cierre de la tabla
-    printf("+-------+----------------------+------------------------+------------------------+------------------+-------------------------+\n");
-}
-
-int main() {
-    pid_t pid;
-    struct process_memory_info mem_info;
-    long result;
-
-    while (1) {
-        // Solicitar el PID
-        printf("Ingrese el PID del proceso (0 para mostrar todos los procesos): ");
-        scanf("%d", &pid);
-
-        if (pid == 0) {
-            // Si el PID es 0, mostrar todos los procesos en una tabla
-            print_all_memory_info();
-        } else if (pid < 0) {
-            // Verificar si se ingresa un PID inválido
-            printf("PID no válido.\n");
-            printf("Saliendo...\n");
-            return 0;
-        } else {
-            // Si se ingresa un PID específico
-            result = luis_recoleccion_general(pid, &mem_info);
-            if (result < 0) {
-                printf("Proceso con PID %d terminado o no encontrado.\n", pid);
-            } else {
-                // Mostrar la información de memoria para el PID ingresado
-                printf("\n");
-                printf("Información de memoria para el PID %d:\n", pid);
-                printf("Reservada: %lu KB\n", mem_info.reserved_memory_kb);
-                printf("Comprometida: %lu KB\n", mem_info.committed_memory_kb);
-                printf("Usada: %lu KB\n", mem_info.used_memory_kb);
-                printf("OOM Score: %d\n", mem_info.oom_score);
-                printf("Porcentaje de memoria usada: %d%%\n", mem_info.percentage_used_memory);
-            }
-        }
-        printf("\n");
-    }
-
-    return 0;
-}
-```
-
-- Para compilar el test se debe de ir desde la terminal a la ruta donde se guardo el archivo test_syscall5.c y como administrador ejecutar los siguientes comandos:
-
-```cpp
-gcc -o test_syscall5 test_syscall5.c
-./test_syscall5
-```
-- Mostrara un en la terminal lo suguiente
-
-![primera imagen](./imagenes_manual/pro2_4.png)
-
-- Mostrara un pequeño menu, si se preciona el 0 mostrara una lista de todos los procesos, si se escribe el PID de algun proceso mostrala solo los datos de ese proceso.
-
-![primera imagen](./imagenes_manual/pro2_5.png)
-![primera imagen](./imagenes_manual/pro2_6.png)
-
-
-Para la tecera prueba y poder verificar que las implementaciones estan correctas en el kernel, es necesario el siguiente archvio de prueba el cual se llama: test_syscall6.c
-
-```cpp
-#include <stdio.h>
-#include <sys/syscall.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <stdlib.h>
-
-#define __NR_luis_resumen_total 556
-
-// Estructura para almacenar la memoria total
-struct memory_summary {
-    unsigned long reserved_memory_mb; // Memoria reservada en MB
-    unsigned long committed_memory_mb; // Memoria comprometida en MB
-};
-
-// Declaración de la syscall
-long luis_resumen_total(struct memory_summary *summary) {
-    return syscall(__NR_luis_resumen_total, summary);
-}
-
-void print_memory_summary(struct memory_summary summary) {
-    const char* green = "\033[32m";   // Color verde
-    const char* yellow = "\033[33m";  // Color amarillo
-    const char* red = "\033[31m";     // Color rojo
-    const char* reset = "\033[0m";    // Reset de color
-
-    // Variables para el color de las columnas de memoria
-    const char* reserved_color;
-    const char* committed_color;
-
-    // Lógica para asignar color a la memoria reservada
-    if (summary.reserved_memory_mb < 1024) {
-        reserved_color = green;  // Verde si es menos de 1GB
-    } else if (summary.reserved_memory_mb < 2048) {
-        reserved_color = yellow; // Amarillo si está entre 1GB y 2GB
-    } else {
-        reserved_color = red;    // Rojo si es más de 2GB
-    }
-
-    // Lógica para asignar color a la memoria comprometida
-    if (summary.committed_memory_mb < 1024) {
-        committed_color = green;  // Verde si es menos de 1GB
-    } else if (summary.committed_memory_mb < 2048) {
-        committed_color = yellow; // Amarillo si está entre 1GB y 2GB
-    } else {
-        committed_color = red;    // Rojo si es más de 2GB
-    }
-
-    // Imprimir la información con colores
-    printf("\n%sResumen de Memoria Total:%s\n", green, reset);
-    printf("+----------------------------------+------------------------------------+\n");
-    printf("| %sMemoria Reservada (VmSize MB)%s    | %sMemoria Comprometida (VmRSS MB)%s    |\n", yellow, reset, yellow, reset);
-    printf("+----------------------------------+------------------------------------+\n");
-    printf("| %-26s%-4lu%s        | %-26s%-4lu%s       |\n", reserved_color, summary.reserved_memory_mb, reset, committed_color, summary.committed_memory_mb, reset);
-    printf("+----------------------------------+------------------------------------+\n");
-}
-
-int main() {
-    struct memory_summary summary;
-    long result;
-
-    // Llamar a la syscall para obtener el resumen de la memoria
-    result = luis_resumen_total(&summary);
-    if (result < 0) {
-        perror("Error al obtener el resumen de memoria");
-        return -1; // Salir en caso de error
-    }
-
-    // Mostrar el resumen de la memoria
-    print_memory_summary(summary);
-
-    return 0;
-}
-```
-
-- Para compilar el test se debe de ir desde la terminal a la ruta donde se guardo el archivo test_syscall6.c y como administrador ejecutar los siguientes comandos:
-
-```cpp
-gcc -o test_syscall6 test_syscall6.c
-./test_syscall6
-```
-
-- Mostrara un en la terminal lo suguiente
-
-![primera imagen](./imagenes_manual/pro2_7.png)
+![primera imagen](./imagenes_manual/Imagen%20de%20WhatsApp%202024-12-31%20a%20las%2018.46.13_54bbbae7.jpg)
 
 <h1> Resolución de problemas y manejo de dificultades </h1>
 
@@ -697,6 +792,8 @@ Esto sucede porque en el archivo syscall_64.tbl no esta la llamada del syscall,s
 
 - Es mejor luego de terminar una syscall compilar el kernel para que así tengamos de una mejor manera los posibles errores.
 
+- El error se soluciono eliminando el long luego de una definicio de la syscall: SYSCALL_DEFINE y si lo usamos estamos generando un conflicto en la declaración de la función y el compilador no podrá procesarla correctamente
+
 <h1> Reflexión personal y autoevaluación</h1>
 
 + Tome en cuenta la reflexion del proyecto pasado, leí varias veces el enunciado y pregunte al auxiliar en los laboratorios sobre todas mis dudas y problemas.
@@ -705,3 +802,4 @@ Esto sucede porque en el archivo syscall_64.tbl no esta la llamada del syscall,s
 
 + También debo evitar pensar en todo lo que se debe de hacer en el enunciado, ya que esto me genera ansiedad, pereza y estrés. Es mejor abordarlo poco a poco. Dividir el proyecto en tareas más pequeñas me permitirá avanzar de manera más ordenada y menos abrumada.
 
++ Tengo que aprender a no distribuir bien mi tiempo entre los 2 cursos que llevé estas vacaciones de diciembre, porque estar haciendo el proyecto a ultima hora es bastante pesado.

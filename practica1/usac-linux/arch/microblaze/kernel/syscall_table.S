@@ -15,4 +15,4 @@ ENTRY(sys_call_table)
 .long sys_so2_add_memory_limit
 .long sys_so2_get_memory_limits
 .long sys_so2_update_memory_limit
-.long sys_so2_remove_memory_limit
+/*.long sys_so2_remove_memory_limit*/

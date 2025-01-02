@@ -1,15 +1,15 @@
 #include <linux/kernel.h>
 #include <linux/syscalls.h>
+#include <linux/mm.h>
+#include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
-#include <linux/mutex.h>
-#include <linux/list.h>
 #include <linux/capability.h>
+#include <linux/list.h>
 
 #define __NR_so2_add_memory_limit 557
 #define __NR_so2_get_memory_limits 558
 #define __NR_so2_update_memory_limit 559
-#define __NR_so2_remove_memory_limit 560
 
 // Estructura para la lista de limitaciones
 struct memory_limitation {
@@ -18,63 +18,63 @@ struct memory_limitation {
     struct list_head list;
 };
 
-// Lista global de limitaciones y mutex
+// Lista global de limitaciones
 static LIST_HEAD(memory_limit_list);
-static DEFINE_MUTEX(memory_limit_lock);
+static DEFINE_MUTEX(memory_limit_lock); // Para acceso concurrente a la lista
 
-// Syscall 1: Agregar límite de memoria
-long SYSCALL_DEFINE2(so2_add_memory_limit, pid_t, process_pid, size_t, memory_limit) {
+// Definición de la syscall
+SYSCALL_DEFINE2(so2_add_memory_limit, pid_t, process_pid, size_t, memory_limit) {
     struct memory_limitation *entry;
     struct task_struct *task;
     struct mm_struct *mm;
 
-    // Validar entrada
+    // Validar entrada: PID negativo o memoria negativa
     if (process_pid <= 0 || memory_limit <= 0) {
-        return -EINVAL;
+        return -EINVAL;  // Devolver error EINVAL
     }
 
     // Verificar permisos de usuario
     if (!capable(CAP_SYS_ADMIN)) {
-        return -EPERM;
+        return -EPERM;  // Devolver error EPERM
     }
 
     // Buscar el proceso
     task = pid_task(find_vpid(process_pid), PIDTYPE_PID);
     if (!task) {
-        return -ESRCH;
+        return -ESRCH;  // Devolver error ESRCH si el proceso no existe
     }
 
     // Verificar memoria usada
     mm = task->mm;
     if (!mm) {
-        return -ESRCH;
+        return -ESRCH;  // Devolver error ESRCH si no se encuentra el mm del proceso
     }
     if (get_mm_rss(mm) * PAGE_SIZE / 1024 > memory_limit) { // Convertimos a KB
-        return -100; // Código de error personalizado
+        return -100;  // Devolver error -100 si el proceso excede el límite
     }
 
     // Bloquear la lista para acceso seguro
     mutex_lock(&memory_limit_lock);
 
-    // Verificar si ya existe
+    // Verificar si ya existe el proceso en la lista
     list_for_each_entry(entry, &memory_limit_list, list) {
         if (entry->pid == process_pid) {
             mutex_unlock(&memory_limit_lock);
-            return -101; // Código de error personalizado
+            return -101;  // Devolver error -101 si el proceso ya está en la lista
         }
     }
 
-    // Crear nueva entrada
+    // Crear nueva entrada en la lista
     entry = kmalloc(sizeof(*entry), GFP_KERNEL);
     if (!entry) {
         mutex_unlock(&memory_limit_lock);
-        return -ENOMEM;
+        return -ENOMEM;  // Devolver error ENOMEM si no hay memoria para el nodo
     }
     entry->pid = process_pid;
     entry->memory_limit = memory_limit;
     INIT_LIST_HEAD(&entry->list);
 
-    // Agregar a la lista
+    // Agregar la entrada a la lista
     list_add(&entry->list, &memory_limit_list);
 
     // Desbloquear la lista
@@ -83,8 +83,8 @@ long SYSCALL_DEFINE2(so2_add_memory_limit, pid_t, process_pid, size_t, memory_li
     return 0; // Éxito
 }
 
-// Syscall 2: Obtener lista de procesos limitados
-long SYSCALL_DEFINE3(so2_get_memory_limits, 
+
+SYSCALL_DEFINE3(so2_get_memory_limits, 
                      struct memory_limitation*, u_processes_buffer, 
                      size_t, max_entries, 
                      int*, processes_returned) {
@@ -152,8 +152,7 @@ long SYSCALL_DEFINE3(so2_get_memory_limits,
     return 0; // Éxito
 }
 
-// syscall 3 Actualizar el límite de un proceso
-long SYSCALL_DEFINE2(so2_update_memory_limit, pid_t, process_pid, size_t, memory_limit) {
+SYSCALL_DEFINE2(so2_update_memory_limit, pid_t, process_pid, size_t, memory_limit) {
     struct memory_limitation *entry;
     struct task_struct *task;
     struct mm_struct *mm;
@@ -207,47 +206,4 @@ long SYSCALL_DEFINE2(so2_update_memory_limit, pid_t, process_pid, size_t, memory
     // Proceso no encontrado en la lista
     set_errno(102); // Código de error personalizado
     return -102;
-}
-
-// Syscall 4: Remover el límite de memoria de un proceso
-long SYSCALL_DEFINE1(so2_remove_memory_limit, pid_t, process_pid) {
-    struct memory_limitation *entry, *tmp;
-    int found = 0;
-
-    // Validar que el PID sea positivo
-    if (process_pid <= 0) {
-        set_errno(EINVAL);
-        return -EINVAL;
-    }
-
-    // Verificar si el usuario es un sudoer
-    if (!capable(CAP_SYS_ADMIN)) {
-        set_errno(EPERM);
-        return -EPERM;
-    }
-
-    // Bloquear la lista para acceso seguro
-    mutex_lock(&memory_limit_lock);
-
-    // Buscar el proceso en la lista
-    list_for_each_entry_safe(entry, tmp, &memory_limit_list, list) {
-        if (entry->pid == process_pid) {
-            // Encontrado el proceso, eliminarlo
-            list_del(&entry->list);
-            kfree(entry);  // Liberar la memoria asignada
-            found = 1;
-            break;
-        }
-    }
-
-    // Desbloquear la lista
-    mutex_unlock(&memory_limit_lock);
-
-    // Si no se encontró el proceso en la lista, devolver error -102
-    if (!found) {
-        set_errno(ESRCH);
-        return -102;
-    }
-
-    return 0;  // Éxito
 }
