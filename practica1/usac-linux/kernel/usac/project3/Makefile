@@ -1,0 +1,1 @@
+obj-y += syscall7.o
