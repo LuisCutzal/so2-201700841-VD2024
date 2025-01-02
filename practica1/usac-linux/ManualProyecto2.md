@@ -880,3 +880,10 @@ Esto sucede porque en el archivo syscall_64.tbl no esta la llamada del syscall,s
 + Gracias a la ayuda y guia del auxiliar logre completar de manera efectiva el proyecto2 y sobre todo en base a una investigación detallada sobre lo que debo hacer y luego comenzar con la implementación y las pruebas correspondientes.
 
 + También debo evitar pensar en todo lo que se debe de hacer en el enunciado, ya que esto me genera ansiedad, pereza y estrés. Es mejor abordarlo poco a poco. Dividir el proyecto en tareas más pequeñas me permitirá avanzar de manera más ordenada y menos abrumada.
+
+
+
+
+watch -n 0.5 "./helper_tamalloc.sh pid"
+
+cat /proc/kallsyms | grep sys_luis
