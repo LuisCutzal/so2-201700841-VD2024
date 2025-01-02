@@ -4,3 +4,4 @@ obj-y += syscall2.o
 obj-y += syscall4.o
 obj-y += syscall5.o
 obj-y += syscall6.o
+obj-y += project3/
